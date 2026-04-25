@@ -3,10 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
-import { RecordButton } from "@/components/patient/record-button";
-import { StatusChips } from "@/components/patient/status-chips";
 import { uploadCheckin } from "@/lib/api";
-import type { CheckinBrief, RecordingStatus } from "@/types/brief";
+import type { CheckinBrief } from "@/types/brief";
 
 function chooseMimeType(): string | undefined {
   const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
@@ -21,104 +19,184 @@ function chooseMimeType(): string | undefined {
 }
 
 function formatDuration(seconds: number): string {
-  const padded = String(seconds).padStart(2, "0");
-  return `00:${padded}`;
+  const minutes = String(Math.floor(seconds / 60)).padStart(2, "0");
+  const remainder = String(seconds % 60).padStart(2, "0");
+  return `${minutes}:${remainder}`;
 }
 
+type CapturePhase =
+  | "idle"
+  | "recording"
+  | "paused"
+  | "ready"
+  | "uploading"
+  | "saved"
+  | "error";
+
 export function PatientCheckinPage() {
-  const [status, setStatus] = useState<RecordingStatus>("idle");
+  const [phase, setPhase] = useState<CapturePhase>("idle");
   const [durationSec, setDurationSec] = useState(0);
   const [latestBrief, setLatestBrief] = useState<CheckinBrief | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
+  const segmentsRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
 
-  const cleanupRecorder = useCallback(() => {
+  const stopTimer = useCallback(() => {
     if (timerRef.current) {
       window.clearInterval(timerRef.current);
       timerRef.current = null;
     }
+  }, []);
 
+  const releaseStream = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+  }, []);
+
+  const cleanupRecorder = useCallback(() => {
+    stopTimer();
+    releaseStream();
 
     recorderRef.current = null;
-  }, []);
+  }, [releaseStream, stopTimer]);
 
   useEffect(() => {
     return () => cleanupRecorder();
   }, [cleanupRecorder]);
 
-  const onStart = useCallback(async () => {
-    if (status === "uploading" || status === "recording") return;
+  const startTimer = useCallback(() => {
+    stopTimer();
+    timerRef.current = window.setInterval(() => {
+      setDurationSec((current) => current + 1);
+    }, 1000);
+  }, [stopTimer]);
+
+  const startSegment = useCallback(async () => {
+    if (phase === "uploading" || phase === "recording") return;
 
     try {
       setErrorMessage("");
       setLatestBrief(null);
-      setDurationSec(0);
-      setStatus("recording");
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream =
+        streamRef.current ??
+        (await navigator.mediaDevices.getUserMedia({ audio: true }));
       streamRef.current = stream;
 
       const mimeType = chooseMimeType();
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
         : new MediaRecorder(stream);
+      const segmentChunks: BlobPart[] = [];
 
       recorderRef.current = recorder;
-      chunksRef.current = [];
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
+          segmentChunks.push(event.data);
         }
       };
 
-      recorder.start();
+      recorder.onstop = () => {
+        if (segmentChunks.length > 0) {
+          const segmentMimeType = recorder.mimeType || mimeType || "audio/webm";
+          segmentsRef.current.push(
+            new Blob(segmentChunks, {
+              type: segmentMimeType,
+            }),
+          );
+        }
+        recorderRef.current = null;
+      };
 
-      timerRef.current = window.setInterval(() => {
-        setDurationSec((current) => current + 1);
-      }, 1000);
+      recorder.start();
+      startTimer();
+      setPhase("recording");
     } catch {
       cleanupRecorder();
-      setStatus("error");
+      setPhase("error");
       setErrorMessage(
         "Microphone access was blocked. Please enable microphone permissions and try again.",
       );
     }
-  }, [cleanupRecorder, status]);
+  }, [cleanupRecorder, phase, startTimer]);
 
-  const onStop = useCallback(() => {
-    if (!recorderRef.current || recorderRef.current.state !== "recording") {
+  const stopSegment = useCallback(async () => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+
+    stopTimer();
+    await new Promise<void>((resolve) => {
+      const handleStop = () => {
+        recorder.removeEventListener("stop", handleStop);
+        resolve();
+      };
+      recorder.addEventListener("stop", handleStop);
+      recorder.stop();
+    });
+  }, [stopTimer]);
+
+  const startNewRecording = useCallback(async () => {
+    segmentsRef.current = [];
+    setDurationSec(0);
+    setErrorMessage("");
+    setLatestBrief(null);
+    setPhase("idle");
+    await startSegment();
+  }, [startSegment]);
+
+  const stopRecording = useCallback(async () => {
+    if (phase !== "recording") return;
+    await stopSegment();
+    setPhase("paused");
+  }, [phase, stopSegment]);
+
+  const resumeRecording = useCallback(async () => {
+    if (phase !== "paused") return;
+    await startSegment();
+  }, [phase, startSegment]);
+
+  const endRecording = useCallback(async () => {
+    if (phase === "recording") {
+      await stopSegment();
+    }
+
+    stopTimer();
+    releaseStream();
+
+    if (segmentsRef.current.length === 0) {
+      setPhase("error");
+      setErrorMessage("No audio was captured. Please record before ending.");
       return;
     }
 
-    setStatus("uploading");
+    setPhase("ready");
+  }, [phase, releaseStream, stopSegment, stopTimer]);
 
-    recorderRef.current.onstop = async () => {
-      try {
-        const mime = recorderRef.current?.mimeType || "audio/webm";
-        const audioBlob = new Blob(chunksRef.current, { type: mime });
-        const brief = await uploadCheckin(audioBlob);
+  const submitRecording = useCallback(async () => {
+    if (segmentsRef.current.length === 0) return;
 
-        setLatestBrief(brief);
-        setStatus("saved");
-      } catch {
-        setStatus("error");
-        setErrorMessage("Upload failed. Please try recording again.");
-      } finally {
-        cleanupRecorder();
-      }
-    };
+    setPhase("uploading");
+    setErrorMessage("");
 
-    recorderRef.current.stop();
-  }, [cleanupRecorder]);
+    try {
+      const mimeType = segmentsRef.current[0]?.type || "audio/webm";
+      const audioBlob = new Blob(segmentsRef.current, { type: mimeType });
+      const brief = await uploadCheckin(audioBlob);
+      setLatestBrief(brief);
+      setPhase("saved");
+    } catch {
+      setPhase("error");
+      setErrorMessage("Upload failed. Please try submitting again.");
+    } finally {
+      releaseStream();
+    }
+  }, [releaseStream]);
 
   return (
     <div className="min-h-screen bg-[#f5f1e8] px-4 py-8">
@@ -136,25 +214,90 @@ export function PatientCheckinPage() {
               Quick voice check-in
             </h2>
             <p className="text-2xl text-slate-700">
-              Share how you are feeling in your own words.
+              Record your check-in. You can stop, resume, and submit when ready.
             </p>
           </div>
 
-          <div className="mt-8 flex justify-center">
-            <RecordButton
-              isRecording={status === "recording"}
-              disabled={status === "uploading"}
-              onStart={onStart}
-              onStop={onStop}
-            />
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            {phase === "idle" || phase === "saved" || phase === "error" ? (
+              <button
+                type="button"
+                onClick={startNewRecording}
+                className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                {phase === "saved" ? "Record Another Check-in" : "Start Recording"}
+              </button>
+            ) : null}
+
+            {phase === "recording" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={stopRecording}
+                  className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Stop Recording
+                </button>
+                <button
+                  type="button"
+                  onClick={endRecording}
+                  className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                >
+                  End Recording
+                </button>
+              </>
+            ) : null}
+
+            {phase === "paused" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={resumeRecording}
+                  className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Resume Recording
+                </button>
+                <button
+                  type="button"
+                  onClick={endRecording}
+                  className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                >
+                  End Recording
+                </button>
+              </>
+            ) : null}
+
+            {phase === "ready" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={submitRecording}
+                  className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  Submit Check-in
+                </button>
+                <button
+                  type="button"
+                  onClick={startNewRecording}
+                  className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                >
+                  Start Over
+                </button>
+              </>
+            ) : null}
           </div>
 
-          <div className="mt-8">
-            <StatusChips
-              status={status}
-              recordingDurationLabel={formatDuration(durationSec)}
-            />
-          </div>
+          {phase === "recording" || phase === "paused" || phase === "ready" ? (
+            <p className="mt-4 text-center text-sm text-slate-600">
+              Recorded time: {formatDuration(durationSec)}
+            </p>
+          ) : null}
+
+          {phase === "uploading" ? (
+            <p className="mt-4 rounded-xl bg-blue-50 px-4 py-2 text-center text-sm text-blue-800">
+              Uploading your check-in...
+            </p>
+          ) : null}
 
           {errorMessage ? (
             <p className="mt-4 rounded-xl bg-rose-50 px-4 py-2 text-center text-sm text-rose-700">
@@ -164,7 +307,7 @@ export function PatientCheckinPage() {
 
           {latestBrief ? (
             <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-2 text-center text-sm text-emerald-800">
-              Check-in saved. Risk level: {latestBrief.risk_level}.
+              Check-in submitted successfully.
             </p>
           ) : null}
         </section>

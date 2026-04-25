@@ -3,6 +3,7 @@ export type RiskLevel = "Green" | "Yellow" | "Red";
 export type RecordingStatus =
   | "idle"
   | "recording"
+  | "paused"
   | "uploading"
   | "saved"
   | "error";

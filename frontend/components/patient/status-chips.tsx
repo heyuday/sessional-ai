@@ -16,6 +16,11 @@ const STATUS_CONFIG: Array<{
     className: "bg-blue-600 text-white border-blue-600",
   },
   {
+    key: "paused",
+    label: "Paused",
+    className: "bg-amber-100 text-amber-800 border-amber-200",
+  },
+  {
     key: "uploading",
     label: "Uploading",
     className: "bg-blue-100 text-blue-800 border-blue-200",

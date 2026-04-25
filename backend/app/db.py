@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .core.config import settings
@@ -20,3 +20,44 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                ALTER TABLE audio_recordings
+                ADD COLUMN IF NOT EXISTS patient_id VARCHAR(36)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                ALTER TABLE audio_recordings
+                ADD COLUMN IF NOT EXISTS brief_risk_level VARCHAR(16)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                ALTER TABLE audio_recordings
+                ADD COLUMN IF NOT EXISTS brief_summary VARCHAR(2000)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                ALTER TABLE audio_recordings
+                ADD COLUMN IF NOT EXISTS brief_key_themes JSON
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                ALTER TABLE audio_recordings
+                ADD COLUMN IF NOT EXISTS brief_divergence_moments JSON
+                """
+            )
+        )

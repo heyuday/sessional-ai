@@ -1,4 +1,6 @@
+import logging
 from datetime import timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -11,16 +13,31 @@ from ....dependencies.auth import require_role
 from ....models.audio_recording import AudioRecording
 from ....models.user_account import UserAccount
 from ....schemas.checkin import StoredAudioMetadata, UploadCheckinResponse
+from ....services.hume_service import extract_utterances
+from ....services.synthesis_service import generate_brief
 
 router = APIRouter(prefix="/checkins", tags=["checkins"])
+
+
+def _fallback_brief() -> UploadCheckinResponse:
+    return UploadCheckinResponse(
+        risk_level="Yellow",
+        summary=(
+            "Your recording was saved, but real-time analysis is temporarily unavailable. "
+            "Please retry later for a fully generated brief."
+        ),
+        key_themes=["Analysis pending retry"],
+        divergence_moments=[],
+    )
 
 
 @router.post("/upload", response_model=UploadCheckinResponse)
 async def upload_checkin(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _current_user: UserAccount = Depends(require_role("patient")),
+    current_user: UserAccount = Depends(require_role("patient")),
 ) -> UploadCheckinResponse:
+    logger = logging.getLogger(__name__)
     if not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -34,16 +51,25 @@ async def upload_checkin(
             detail="Uploaded file is empty.",
         )
 
+    logger.info(
+        "Upload received: file_name=%s mime_type=%s size_bytes=%s",
+        file.filename,
+        file.content_type or "application/octet-stream",
+        len(contents),
+    )
     try:
         recording = AudioRecording(
             file_name=file.filename,
             mime_type=file.content_type or "application/octet-stream",
             size_bytes=len(contents),
             audio_data=contents,
+            patient_id=current_user.id,
             processing_status="pending",
         )
         db.add(recording)
         db.commit()
+        db.refresh(recording)
+        logger.info("Recording persisted: recording_id=%s status=%s", recording.id, recording.processing_status)
     except SQLAlchemyError as exc:
         db.rollback()
         raise HTTPException(
@@ -51,27 +77,65 @@ async def upload_checkin(
             detail="Unable to persist audio in local PostgreSQL.",
         ) from exc
 
-    return UploadCheckinResponse(
-        risk_level="Yellow",
-        summary="Moderate stress markers with notable vocal tension in mismatch segments.",
-        key_themes=["Sleep disruption", "Work stress", "Treatment uncertainty"],
-        divergence_moments=[
-            {
-                "timestamp": "14:32",
-                "transcript_snippet": "I've been okay overall.",
-                "mismatch_label": "Neutral semantics with elevated vocal stress",
-                "severity": "high",
-                "confidence": 0.92,
-            },
-            {
-                "timestamp": "16:17",
-                "transcript_snippet": "It has been manageable.",
-                "mismatch_label": "Positive framing with anxious prosody",
-                "severity": "medium",
-                "confidence": 0.85,
-            },
-        ],
-    )
+    try:
+        recording.processing_status = "processing"
+        db.commit()
+        logger.info("Recording processing started: recording_id=%s", recording.id)
+
+        utterances = await extract_utterances(
+            audio_bytes=contents,
+            mime_type=file.content_type or "application/octet-stream",
+        )
+        logger.info("Hume utterances extracted: recording_id=%s utterances=%s", recording.id, len(utterances))
+        brief = await generate_brief(utterances)
+        logger.info(
+            "Brief generated: recording_id=%s risk_level=%s divergence_moments=%s",
+            recording.id,
+            brief.risk_level,
+            len(brief.divergence_moments),
+        )
+        recording.brief_risk_level = brief.risk_level
+        recording.brief_summary = brief.summary
+        recording.brief_key_themes = brief.key_themes
+        recording.brief_divergence_moments = [
+            moment.model_dump() for moment in brief.divergence_moments
+        ]
+
+        recording.processing_status = "processed"
+        recording.processed_at = datetime.now(UTC)
+        db.commit()
+        logger.info("Recording processing completed: recording_id=%s status=%s", recording.id, recording.processing_status)
+    except RuntimeError as exc:
+        db.rollback()
+        logging.warning("Check-in processing fallback triggered: %s", exc)
+        try:
+            fallback = _fallback_brief()
+            recording.processing_status = "processed_fallback"
+            recording.processed_at = datetime.now(UTC)
+            recording.brief_risk_level = fallback.risk_level
+            recording.brief_summary = fallback.summary
+            recording.brief_key_themes = fallback.key_themes
+            recording.brief_divergence_moments = [
+                moment.model_dump() for moment in fallback.divergence_moments
+            ]
+            db.commit()
+            logger.info("Recording fallback saved: recording_id=%s status=%s", recording.id, recording.processing_status)
+        except SQLAlchemyError:
+            db.rollback()
+        return fallback
+    except SQLAlchemyError as exc:
+        db.rollback()
+        try:
+            recording.processing_status = "failed"
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Unable to process upload: {exc}",
+        ) from exc
+
+    return UploadCheckinResponse.model_validate(brief.model_dump())
 
 
 @router.get("/storage/latest", response_model=StoredAudioMetadata)

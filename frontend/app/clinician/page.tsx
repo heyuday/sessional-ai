@@ -1,17 +1,41 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
-import { MOCK_PATIENT_BRIEFS } from "@/lib/mock-data";
+import { getClinicianBriefs } from "@/lib/api";
+import type { PatientBrief } from "@/types/clinician";
 
 export default function ClinicianDashboardPage() {
+  const [briefs, setBriefs] = useState<PatientBrief[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    async function loadBriefs() {
+      try {
+        setLoading(true);
+        setError("");
+        const response = await getClinicianBriefs();
+        if (active) setBriefs(response);
+      } catch {
+        if (active) setError("Unable to load patient briefs right now.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadBriefs();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const selected = useMemo(
-    () => MOCK_PATIENT_BRIEFS.find((p) => p.patient_id === selectedPatientId) ?? null,
-    [selectedPatientId],
+    () => briefs.find((p) => p.patient_id === selectedPatientId) ?? null,
+    [briefs, selectedPatientId],
   );
 
   return (
@@ -28,7 +52,22 @@ export default function ClinicianDashboardPage() {
         </div>
 
         <section className="mt-6 grid gap-4">
-          {MOCK_PATIENT_BRIEFS.map((brief) => (
+          {loading ? (
+            <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+              Loading patient briefs...
+            </p>
+          ) : null}
+          {error ? (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              {error}
+            </p>
+          ) : null}
+          {!loading && !error && briefs.length === 0 ? (
+            <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+              No patient check-ins yet.
+            </p>
+          ) : null}
+          {briefs.map((brief) => (
             <button
               key={brief.patient_id}
               type="button"

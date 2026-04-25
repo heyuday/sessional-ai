@@ -1,22 +1,65 @@
+"use client";
+
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { ClinicalSummaryCard } from "@/components/clinician/clinical-summary-card";
 import { DivergenceTimeline } from "@/components/clinician/divergence-timeline";
 import { NotesActionsPanel } from "@/components/clinician/notes-actions-panel";
 import { TranscriptAffectPanel } from "@/components/clinician/transcript-affect-panel";
-import { getPatientBrief } from "@/lib/mock-data";
+import { getClinicianBrief } from "@/lib/api";
+import type { PatientBrief } from "@/types/clinician";
 
-interface PatientBriefPageProps {
-  params: Promise<{ patientId: string }>;
-}
+export default function PatientBriefPage() {
+  const params = useParams<{ patientId: string }>();
+  const patientId = params.patientId;
+  const [brief, setBrief] = useState<PatientBrief | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>("");
 
-export default async function PatientBriefPage({ params }: PatientBriefPageProps) {
-  const { patientId } = await params;
-  const brief = getPatientBrief(patientId);
+  useEffect(() => {
+    let active = true;
+    async function loadPatientBrief() {
+      if (!patientId) return;
+      try {
+        setLoading(true);
+        setError("");
+        const response = await getClinicianBrief(patientId);
+        if (active) setBrief(response);
+      } catch {
+        if (active) setError("Unable to load this patient brief.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadPatientBrief();
+    return () => {
+      active = false;
+    };
+  }, [patientId]);
 
-  if (!brief) {
-    notFound();
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 px-6 py-8">
+        <main className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-sm text-slate-600">Loading patient brief...</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (error || !brief) {
+    return (
+      <div className="min-h-screen bg-slate-50 px-6 py-8">
+        <main className="mx-auto max-w-3xl rounded-2xl border border-rose-200 bg-rose-50 p-5">
+          <p className="text-sm text-rose-700">{error || "Patient brief not found."}</p>
+          <Link href="/clinician" className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline">
+            Back to dashboard
+          </Link>
+        </main>
+      </div>
+    );
   }
 
   return (

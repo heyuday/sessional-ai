@@ -1,4 +1,5 @@
 import type { CheckinBrief } from "@/types/brief";
+import type { PatientBrief } from "@/types/clinician";
 import { getAuthTokenFromCookie } from "@/lib/auth";
 
 const API_BASE_URL =
@@ -28,4 +29,34 @@ export async function uploadCheckin(audioBlob: Blob): Promise<CheckinBrief> {
   }
 
   return (await response.json()) as CheckinBrief;
+}
+
+function authHeaders(): HeadersInit | undefined {
+  const token = getAuthTokenFromCookie();
+  if (!token) return undefined;
+  return { Authorization: `Bearer ${token}` };
+}
+
+export async function getClinicianBriefs(): Promise<PatientBrief[]> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/briefs/patients`, {
+    method: "GET",
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch clinician briefs: ${response.status}`);
+  }
+  return (await response.json()) as PatientBrief[];
+}
+
+export async function getClinicianBrief(patientId: string): Promise<PatientBrief> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/briefs/patients/${patientId}`, {
+    method: "GET",
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch patient brief: ${response.status}`);
+  }
+  return (await response.json()) as PatientBrief;
 }

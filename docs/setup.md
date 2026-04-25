@@ -122,6 +122,16 @@ Override with `.env` in `backend/`:
 
 ```bash
 DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/sessional
+PROCESSING_MODE=mock
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-2.5-flash
+HUME_API_KEY=your_key_here
+HUME_BASE_URL=https://api.hume.ai
+HUME_TIMEOUT_SECONDS=60
+HUME_POLL_INTERVAL_SECONDS=3
+HUME_MAX_WAIT_SECONDS=180
+HUME_PROSODY_GRANULARITY=utterance
 ```
 
 ### Verify Audio Persistence

@@ -7,6 +7,13 @@ from .api.v1.router import api_router
 from .core.config import settings
 from .db import init_db
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
