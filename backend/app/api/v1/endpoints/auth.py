@@ -13,7 +13,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _to_profile(user: UserAccount) -> UserProfile:
-    return UserProfile(id=user.id, email=user.email, role=user.role)
+    return UserProfile(
+        id=user.id,
+        full_name=user.full_name or "Unknown User",
+        email=user.email,
+        role=user.role,
+    )
 
 
 @router.post("/signup", response_model=AuthResponse)
@@ -29,6 +34,7 @@ async def sign_up(payload: SignUpRequest, db: Session = Depends(get_db)) -> Auth
 
     try:
         user = UserAccount(
+            full_name=payload.full_name.strip(),
             email=payload.email.lower(),
             password_hash=hash_password(payload.password),
             role=payload.role,

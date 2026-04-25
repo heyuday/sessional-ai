@@ -3,20 +3,21 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { ClinicalSummaryCard } from "@/components/clinician/clinical-summary-card";
 import { DivergenceTimeline } from "@/components/clinician/divergence-timeline";
-import { NotesActionsPanel } from "@/components/clinician/notes-actions-panel";
-import { TranscriptAffectPanel } from "@/components/clinician/transcript-affect-panel";
-import { getClinicianBrief } from "@/lib/api";
+import { deleteClinicianPatientReports, getClinicianBrief } from "@/lib/api";
 import type { PatientBrief } from "@/types/clinician";
 
 export default function PatientBriefPage() {
+  const router = useRouter();
   const params = useParams<{ patientId: string }>();
   const patientId = params.patientId;
   const [brief, setBrief] = useState<PatientBrief | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -62,6 +63,22 @@ export default function PatientBriefPage() {
     );
   }
 
+  async function handleDeleteReports(): Promise<void> {
+    const confirmed = window.confirm(
+      "Delete all stored reports for this patient? This cannot be undone.",
+    );
+    if (!confirmed) return;
+    try {
+      setIsDeleting(true);
+      await deleteClinicianPatientReports(patientId);
+      router.push("/clinician");
+    } catch {
+      setError("Unable to delete reports right now.");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-8">
       <main className="mx-auto max-w-7xl">
@@ -73,10 +90,20 @@ export default function PatientBriefPage() {
 
         <header className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <h1 className="text-3xl font-semibold text-slate-900">{brief.patient_name}</h1>
-            <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
-              Current risk {brief.risk_level}
-            </span>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-semibold text-slate-900">{brief.patient_name}</h1>
+              <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                Current risk {brief.risk_level}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleDeleteReports()}
+              disabled={isDeleting}
+              className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+            >
+              {isDeleting ? "Deleting..." : "Delete Reports"}
+            </button>
           </div>
           <div className="mt-3 grid gap-3 text-sm text-slate-700 md:grid-cols-3">
             <p>
@@ -98,7 +125,6 @@ export default function PatientBriefPage() {
           </div>
 
           <div className="space-y-4">
-            <TranscriptAffectPanel transcript={brief.transcript} />
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <h2 className="text-xl font-semibold text-slate-900">Trends</h2>
               <div className="mt-3 space-y-3">
@@ -110,7 +136,6 @@ export default function PatientBriefPage() {
                 ))}
               </div>
             </section>
-            <NotesActionsPanel />
           </div>
         </div>
       </main>

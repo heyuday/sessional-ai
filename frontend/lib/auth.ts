@@ -8,6 +8,7 @@ interface AuthApiResponse {
   token_type: "bearer";
   user: {
     id: string;
+    full_name: string;
     email: string;
     role: UserRole;
   };
@@ -62,7 +63,7 @@ async function parseResponse(response: Response): Promise<AuthApiResponse> {
 }
 
 export async function signUp(
-  payload: AuthPayload & { role: UserRole },
+  payload: AuthPayload & { role: UserRole; full_name: string },
 ): Promise<AuthApiResponse> {
   const response = await fetch(`${API_BASE_URL}/api/v1/auth/signup`, {
     method: "POST",

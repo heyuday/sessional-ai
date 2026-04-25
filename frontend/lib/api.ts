@@ -60,3 +60,19 @@ export async function getClinicianBrief(patientId: string): Promise<PatientBrief
   }
   return (await response.json()) as PatientBrief;
 }
+
+export async function deleteClinicianPatientReports(
+  patientId: string,
+): Promise<{ deleted_reports: number }> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/briefs/patients/${patientId}/reports`,
+    {
+      method: "DELETE",
+      headers: authHeaders(),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to delete patient reports: ${response.status}`);
+  }
+  return (await response.json()) as { deleted_reports: number };
+}

@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
-import { getClinicianBriefs } from "@/lib/api";
+import { deleteClinicianPatientReports, getClinicianBriefs } from "@/lib/api";
 import type { PatientBrief } from "@/types/clinician";
 
 export default function ClinicianDashboardPage() {
   const [briefs, setBriefs] = useState<PatientBrief[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
+  const [deletingPatientId, setDeletingPatientId] = useState<string | null>(null);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,6 +38,26 @@ export default function ClinicianDashboardPage() {
     () => briefs.find((p) => p.patient_id === selectedPatientId) ?? null,
     [briefs, selectedPatientId],
   );
+
+  async function handleDeleteReports(patientId: string): Promise<void> {
+    const confirmed = window.confirm(
+      "Delete all stored reports for this patient? This cannot be undone.",
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingPatientId(patientId);
+      await deleteClinicianPatientReports(patientId);
+      setBriefs((current) => current.filter((brief) => brief.patient_id !== patientId));
+      if (selectedPatientId === patientId) {
+        setSelectedPatientId(null);
+      }
+    } catch {
+      setError("Unable to delete reports right now.");
+    } finally {
+      setDeletingPatientId(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-8">
@@ -68,11 +89,9 @@ export default function ClinicianDashboardPage() {
             </p>
           ) : null}
           {briefs.map((brief) => (
-            <button
+            <div
               key={brief.patient_id}
-              type="button"
-              className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-blue-200"
-              onClick={() => setSelectedPatientId(brief.patient_id)}
+              className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -89,7 +108,24 @@ export default function ClinicianDashboardPage() {
                 </div>
               </div>
               <p className="mt-3 text-sm text-slate-700">{brief.summary}</p>
-            </button>
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPatientId(brief.patient_id)}
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Quick View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteReports(brief.patient_id)}
+                  disabled={deletingPatientId === brief.patient_id}
+                  className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+                >
+                  {deletingPatientId === brief.patient_id ? "Deleting..." : "Delete Reports"}
+                </button>
+              </div>
+            </div>
           ))}
         </section>
       </main>

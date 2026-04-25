@@ -15,6 +15,7 @@ class UserAccount(Base):
         primary_key=True,
         default=lambda: str(uuid.uuid4()),
     )
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32))  # patient | clinician

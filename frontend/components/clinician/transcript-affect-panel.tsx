@@ -19,20 +19,24 @@ export function TranscriptAffectPanel({ transcript }: TranscriptAffectPanelProps
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5">
       <h2 className="text-xl font-semibold text-slate-900">Transcript + Affect</h2>
-      <div className="mt-4 space-y-3">
-        {transcript.map((item) => (
-          <div key={`${item.timestamp}-${item.text}`} className="rounded-xl border border-slate-200 px-3 py-2">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-sm text-slate-800">
-                ({item.timestamp}) {item.speaker}: {item.text}
-              </p>
-              <span className={`shrink-0 rounded-lg px-2 py-1 text-xs font-medium ${affectTone(item.affect)}`}>
-                {item.affect}
-              </span>
+      {transcript.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-600">No transcript snippets available for this check-in.</p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {transcript.map((item) => (
+            <div key={`${item.timestamp}-${item.text}`} className="rounded-xl border border-slate-200 px-3 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm text-slate-800">
+                  ({item.timestamp}) {item.speaker}: {item.text}
+                </p>
+                <span className={`shrink-0 rounded-lg px-2 py-1 text-xs font-medium ${affectTone(item.affect)}`}>
+                  {item.affect}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

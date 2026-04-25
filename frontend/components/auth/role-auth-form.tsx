@@ -22,6 +22,7 @@ export function RoleAuthForm({
 }: RoleAuthFormProps) {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>("login");
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>("");
@@ -30,12 +31,13 @@ export function RoleAuthForm({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!email || !password) return;
+    if (mode === "signup" && !fullName.trim()) return;
     setError("");
     setIsSubmitting(true);
 
     try {
       if (mode === "signup") {
-        await signUp({ email, password, role });
+        await signUp({ full_name: fullName.trim(), email, password, role });
       } else {
         const response = await login({ email, password });
         if (response.user.role !== role) {
@@ -89,6 +91,19 @@ export function RoleAuthForm({
           onSubmit={handleSubmit}
           className="mt-6 space-y-4"
         >
+          {mode === "signup" ? (
+            <label className="block text-sm font-medium text-slate-700">
+              Full name
+              <input
+                type="text"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus:border-blue-500 focus:outline-none"
+                required
+              />
+            </label>
+          ) : null}
+
           <label className="block text-sm font-medium text-slate-700">
             Email
             <input

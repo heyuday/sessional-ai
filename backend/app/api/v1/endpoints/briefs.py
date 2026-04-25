@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.orm import Session
 
 from ....db import get_db
@@ -12,11 +12,6 @@ from ....schemas.brief import DivergenceMoment
 from ....schemas.clinician import PatientBrief, TranscriptItem, TrendItem
 
 router = APIRouter(prefix="/briefs", tags=["briefs"])
-
-
-def _patient_name(email: str) -> str:
-    left = email.split("@", maxsplit=1)[0]
-    return " ".join(part.capitalize() for part in left.replace("_", " ").replace(".", " ").split())
 
 
 def _relative_label(created_at: datetime) -> str:
@@ -73,7 +68,7 @@ def _build_patient_brief(recording: AudioRecording, patient: UserAccount) -> Pat
     trend = _risk_trend_label(risk_level)
     return PatientBrief(
         patient_id=patient.id,
-        patient_name=_patient_name(patient.email),
+        patient_name=patient.full_name or "Unknown Patient",
         assigned_clinician="Sessional Care Team",
         next_appointment="Not scheduled",
         last_checkin_label=_relative_label(created_at),
@@ -153,3 +148,20 @@ async def get_patient_brief(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No brief found for patient.")
 
     return _build_patient_brief(recording, patient)
+
+
+@router.delete("/patients/{patient_id}/reports")
+async def delete_patient_reports(
+    patient_id: str,
+    db: Session = Depends(get_db),
+    _current_user: UserAccount = Depends(require_role("clinician")),
+) -> dict[str, int]:
+    patient = db.get(UserAccount, patient_id)
+    if patient is None or patient.role != "patient":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found.")
+
+    deleted = db.execute(
+        delete(AudioRecording).where(AudioRecording.patient_id == patient_id)
+    ).rowcount or 0
+    db.commit()
+    return {"deleted_reports": deleted}

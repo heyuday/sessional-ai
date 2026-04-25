@@ -24,6 +24,14 @@ def init_db() -> None:
         connection.execute(
             text(
                 """
+                ALTER TABLE user_accounts
+                ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
                 ALTER TABLE audio_recordings
                 ADD COLUMN IF NOT EXISTS patient_id VARCHAR(36)
                 """
