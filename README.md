@@ -1,6 +1,7 @@
-# Sessional MVP
+# Sessional 
 
-Sessional is an asynchronous mental health check-in app where patients record short voice updates and clinicians review structured pre-session briefs.
+Therapists often see patients once a week (or less), but emotional state can change every day. Between sessions, important signals get lost in text check-ins or never get shared at all. We built Sessional to close that gap: give patients a low-friction way to send voice updates, and give therapists a fast, structured view of what needs attention before the next session.
+
 
 ## Setup Guide
 
