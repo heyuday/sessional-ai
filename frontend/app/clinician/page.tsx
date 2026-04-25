@@ -7,6 +7,38 @@ import { SignOutButton } from "@/components/auth/sign-out-button";
 import { deleteClinicianPatientReports, getClinicianBriefs } from "@/lib/api";
 import type { PatientBrief } from "@/types/clinician";
 
+function riskBadgeClass(riskLevel: PatientBrief["risk_level"]): string {
+  if (riskLevel === "Red") {
+    return "bg-rose-100 text-rose-700";
+  }
+  if (riskLevel === "Yellow") {
+    return "bg-amber-100 text-amber-800";
+  }
+  return "bg-emerald-100 text-emerald-700";
+}
+
+function severityChipClass(severity: "low" | "medium" | "high"): string {
+  if (severity === "high") return "bg-rose-100 text-rose-700";
+  if (severity === "medium") return "bg-amber-100 text-amber-800";
+  return "bg-slate-100 text-slate-700";
+}
+
+function SnapshotText({ summary }: { summary: string }) {
+  const marker = "Key themes this week include ";
+  const markerIndex = summary.indexOf(marker);
+  if (markerIndex === -1) {
+    return <>{summary}</>;
+  }
+  const intro = summary.slice(0, markerIndex).trimEnd();
+  const themed = summary.slice(markerIndex).trim();
+  return (
+    <>
+      {intro}{" "}
+      <strong>{themed}</strong>
+    </>
+  );
+}
+
 export default function ClinicianDashboardPage() {
   const [briefs, setBriefs] = useState<PatientBrief[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +134,9 @@ export default function ClinicianDashboardPage() {
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
                     {brief.trend_label}
                   </span>
-                  <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${riskBadgeClass(brief.risk_level)}`}
+                  >
                     {brief.risk_level}
                   </span>
                 </div>
@@ -140,15 +174,18 @@ export default function ClinicianDashboardPage() {
                   Last check-in: {selected.last_checkin_label} · Trend: {selected.trend_label}
                 </p>
               </div>
-              <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${riskBadgeClass(selected.risk_level)}`}
+              >
                 {selected.risk_level}
               </span>
             </div>
 
             <section className="mt-4">
               <h3 className="text-sm font-semibold text-slate-900">60-second snapshot</h3>
-              <p className="mt-1 text-sm text-slate-700">{selected.summary}</p>
-              <p className="mt-1 text-xs text-slate-600">{selected.what_changed}</p>
+              <p className="mt-1 text-sm text-slate-700">
+                <SnapshotText summary={selected.summary} />
+              </p>
             </section>
 
             <section className="mt-4">
@@ -162,6 +199,16 @@ export default function ClinicianDashboardPage() {
                     <p className="text-xs font-semibold text-slate-500">{moment.timestamp}</p>
                     <p className="text-sm text-slate-800">{moment.transcript_snippet}</p>
                     <p className="text-xs text-slate-600">{moment.mismatch_label}</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${severityChipClass(moment.severity)}`}
+                      >
+                        {moment.severity}
+                      </span>
+                      <span className="text-[11px] text-slate-600">
+                        {Math.round(moment.confidence * 100)}% confidence
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ul>

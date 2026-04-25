@@ -16,20 +16,34 @@ def _mock_utterances() -> list[UtteranceExtraction]:
         UtteranceExtraction(
             timestamp="00:14",
             transcript="I think everything has been okay this week.",
+            begin_seconds=14.0,
+            end_seconds=18.0,
+            duration_seconds=4.0,
             top_emotions=[
                 EmotionScore(name="Distress", score=0.79),
                 EmotionScore(name="Anxiety", score=0.73),
+                EmotionScore(name="Sadness", score=0.44),
+                EmotionScore(name="Confusion", score=0.33),
                 EmotionScore(name="Calmness", score=0.12),
             ],
+            text_sentiment_score=6.4,
+            text_sentiment_label="positive",
         ),
         UtteranceExtraction(
             timestamp="00:38",
             transcript="Work was manageable, nothing too bad.",
+            begin_seconds=38.0,
+            end_seconds=42.0,
+            duration_seconds=4.0,
             top_emotions=[
                 EmotionScore(name="Fear", score=0.67),
                 EmotionScore(name="Doubt", score=0.61),
+                EmotionScore(name="Distress", score=0.58),
+                EmotionScore(name="Anxiety", score=0.51),
                 EmotionScore(name="Calmness", score=0.2),
             ],
+            text_sentiment_score=5.8,
+            text_sentiment_label="neutral_positive",
         ),
     ]
 
@@ -95,7 +109,12 @@ async def _start_job(client: httpx.AsyncClient, audio_bytes: bytes, mime_type: s
             "prosody": {
                 "granularity": settings.hume_prosody_granularity,
                 "identify_speakers": False,
-            }
+            },
+            "language": {
+                "granularity": settings.hume_prosody_granularity,
+                "sentiment": {},
+                "identify_speakers": False,
+            },
         }
     }
     files = [("file", ("checkin-audio", audio_bytes, mime_type))]
@@ -169,6 +188,8 @@ def _normalize_utterances(predictions_payload: list[dict]) -> list[UtteranceExtr
         for prediction in results.get("predictions", []):
             models = prediction.get("models", {})
             prosody = models.get("prosody", {})
+            language = models.get("language", {})
+            language_index = _build_language_index(language.get("grouped_predictions", []))
             groups = prosody.get("grouped_predictions", [])
             for group in groups:
                 for item in group.get("predictions", []):
@@ -177,16 +198,29 @@ def _normalize_utterances(predictions_payload: list[dict]) -> list[UtteranceExtr
                         continue
 
                     time_info = item.get("time", {})
-                    timestamp = _to_mm_ss(time_info.get("begin"))
-                    top_emotions = _top_emotions(item.get("emotions", []), limit=3)
+                    begin_seconds = _to_seconds(time_info.get("begin"))
+                    end_seconds = _to_seconds(time_info.get("end"))
+                    timestamp = _to_mm_ss(begin_seconds)
+                    top_emotions = _top_emotions(item.get("emotions", []), limit=6)
                     if not top_emotions:
                         continue
 
+                    sentiment_score, sentiment_label = _lookup_sentiment(
+                        language_index=language_index,
+                        transcript=text,
+                        begin_seconds=begin_seconds,
+                        end_seconds=end_seconds,
+                    )
                     utterances.append(
                         UtteranceExtraction(
                             timestamp=timestamp,
                             transcript=text,
+                            begin_seconds=begin_seconds,
+                            end_seconds=end_seconds,
+                            duration_seconds=max(0.0, end_seconds - begin_seconds),
                             top_emotions=top_emotions,
+                            text_sentiment_score=sentiment_score,
+                            text_sentiment_label=sentiment_label,
                         )
                     )
 
@@ -209,10 +243,75 @@ def _top_emotions(raw: list[dict], limit: int) -> list[EmotionScore]:
 
 
 def _to_mm_ss(seconds: object) -> str:
-    if not isinstance(seconds, int | float):
-        return "00:00"
-
-    total_seconds = max(0, int(round(float(seconds))))
+    total_seconds = max(0, int(round(_to_seconds(seconds))))
     minutes = total_seconds // 60
     remaining = total_seconds % 60
     return f"{minutes:02d}:{remaining:02d}"
+
+
+def _to_seconds(value: object) -> float:
+    if not isinstance(value, int | float):
+        return 0.0
+    return max(0.0, float(value))
+
+
+def _build_language_index(grouped_predictions: list[dict]) -> dict[tuple[str, int, int], dict]:
+    index: dict[tuple[str, int, int], dict] = {}
+    for group in grouped_predictions:
+        for item in group.get("predictions", []):
+            text = str(item.get("text", "")).strip()
+            if not text:
+                continue
+            time_info = item.get("time", {})
+            begin = int(round(_to_seconds(time_info.get("begin")) * 100))
+            end = int(round(_to_seconds(time_info.get("end")) * 100))
+            index[(text.lower(), begin, end)] = item
+    return index
+
+
+def _lookup_sentiment(
+    language_index: dict[tuple[str, int, int], dict],
+    transcript: str,
+    begin_seconds: float,
+    end_seconds: float,
+) -> tuple[float | None, str | None]:
+    begin = int(round(begin_seconds * 100))
+    end = int(round(end_seconds * 100))
+    item = language_index.get((transcript.lower(), begin, end))
+    if item is None:
+        item = language_index.get((transcript.lower(), begin, begin))
+    if item is None:
+        return None, None
+
+    score = _sentiment_expected_score(item.get("sentiment", []))
+    if score is None:
+        return None, None
+    return score, _sentiment_label(score)
+
+
+def _sentiment_expected_score(sentiment_distribution: list[dict]) -> float | None:
+    weighted = 0.0
+    total = 0.0
+    for bucket in sentiment_distribution:
+        name = bucket.get("name")
+        probability = bucket.get("score")
+        if not isinstance(name, str) or not isinstance(probability, int | float):
+            continue
+        try:
+            level = float(name)
+        except ValueError:
+            continue
+        weighted += level * float(probability)
+        total += float(probability)
+
+    if total <= 0:
+        return None
+    return round(weighted / total, 3)
+
+
+def _sentiment_label(score: float) -> str:
+    if score >= 6.0:
+        return "positive"
+    if score <= 4.0:
+        return "negative"
+    return "neutral"

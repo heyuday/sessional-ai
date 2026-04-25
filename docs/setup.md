@@ -144,6 +144,11 @@ Notes:
 
 - `PROCESSING_MODE=real` uses Hume + Gemini.
 - `PROCESSING_MODE=mock` bypasses external model calls for stable local UI demos.
+- Real mode now uses:
+  - Hume `prosody` + `language` sentiment at utterance granularity
+  - top-6 emotion context + utterance duration
+  - divergence candidates based on semantic sentiment vs negative-valence prosody
+  - Gemini systemInstruction + deterministic generation config
 
 ### Verify Audio Persistence
 
@@ -161,6 +166,13 @@ psql postgresql://postgres:postgres@127.0.0.1:5432/sessional \
 - Uploaded audio is currently stored in PostgreSQL `audio_recordings.audio_data` (`bytea`) until we add post-processing deletion.
 - If external model processing fails in real mode, upload still returns `200` with a fallback brief and records `processed_fallback`.
 - Clinician dashboard and full brief pages now use live backend data rather than frontend mock data.
+- 60-second snapshot (`summary`) is theme-focused and intentionally avoids explicit divergence wording.
+- `clinical_summary` is a separate clinician-facing rationale and includes divergence count context.
+- Divergence timeline snippets are normalized to fuller utterance context when model output is too fragmentary.
+- Trends are computed against the patient's prior check-in:
+  - risk direction uses `Green < Yellow < Red`
+  - divergence frequency uses divergence-moment count deltas
+  - divergence intensity uses weighted severity-confidence deltas
 
 ## Optional Local Reset
 

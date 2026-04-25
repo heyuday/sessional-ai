@@ -24,6 +24,9 @@ export function DivergenceTimeline({ moments }: DivergenceTimelineProps) {
             <p className="mt-2 text-sm text-slate-800">
               Mismatch: {moment.mismatch_label}
             </p>
+            <p className="mt-1 text-xs text-slate-600">
+              Interpretation: this segment shows mismatch between what is said and how it is expressed in voice.
+            </p>
             <div className="mt-3 flex items-center gap-3">
               <span className={`rounded-full px-2 py-1 text-xs font-medium ${severityClass(moment.severity)}`}>
                 {moment.severity}
@@ -32,6 +35,9 @@ export function DivergenceTimeline({ moments }: DivergenceTimelineProps) {
                 Confidence: {Math.round(moment.confidence * 100)}%
               </span>
             </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Clinical context: probe this timestamp for stressor details, perceived coping, and emotional intensity.
+            </p>
           </article>
         ))}
       </div>

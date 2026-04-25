@@ -1,0 +1,32 @@
+[
+  {
+    "case_id": "neutral_text_distressed_voice",
+    "utterances": [
+      {
+        "timestamp": "00:01",
+        "transcript": "I'm doing fine.",
+        "semantic_sentiment_score": 6.3,
+        "prosody_distress_score": 0.81
+      }
+    ],
+    "expected": {
+      "candidate_divergence_count_min": 1,
+      "allowed_risk_levels": ["Yellow", "Red"]
+    }
+  },
+  {
+    "case_id": "negative_text_negative_voice",
+    "utterances": [
+      {
+        "timestamp": "00:04",
+        "transcript": "I feel very low today.",
+        "semantic_sentiment_score": 2.3,
+        "prosody_distress_score": 0.77
+      }
+    ],
+    "expected": {
+      "candidate_divergence_count_max": 0,
+      "allowed_risk_levels": ["Yellow", "Red"]
+    }
+  }
+]

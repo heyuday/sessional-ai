@@ -24,6 +24,7 @@ class PatientBrief(BaseModel):
     risk_level: str
     trend_label: str
     summary: str
+    clinical_summary: str
     what_changed: str
     key_themes: list[str]
     opening_questions: list[str]

@@ -9,7 +9,7 @@ export function ClinicalSummaryCard({ brief }: ClinicalSummaryCardProps) {
     <section className="rounded-2xl border border-slate-200 bg-white p-5">
       <h2 className="text-xl font-semibold text-slate-900">Clinical Summary</h2>
       <p className="mt-2 text-sm text-slate-800">
-        <span className="font-semibold">Risk rationale:</span> {brief.summary}
+        <span className="font-semibold">Risk rationale:</span> {brief.clinical_summary}
       </p>
       <div className="mt-4 grid gap-6 md:grid-cols-2">
         <div>

@@ -21,6 +21,7 @@ export interface PatientBrief {
   risk_level: RiskLevel;
   trend_label: string;
   summary: string;
+  clinical_summary: string;
   what_changed: string;
   key_themes: string[];
   opening_questions: string[];

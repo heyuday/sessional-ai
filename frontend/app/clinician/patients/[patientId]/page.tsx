@@ -10,6 +10,16 @@ import { DivergenceTimeline } from "@/components/clinician/divergence-timeline";
 import { deleteClinicianPatientReports, getClinicianBrief } from "@/lib/api";
 import type { PatientBrief } from "@/types/clinician";
 
+function riskBadgeClass(riskLevel: PatientBrief["risk_level"]): string {
+  if (riskLevel === "Red") {
+    return "bg-rose-100 text-rose-700";
+  }
+  if (riskLevel === "Yellow") {
+    return "bg-amber-100 text-amber-800";
+  }
+  return "bg-emerald-100 text-emerald-700";
+}
+
 export default function PatientBriefPage() {
   const router = useRouter();
   const params = useParams<{ patientId: string }>();
@@ -92,7 +102,9 @@ export default function PatientBriefPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-semibold text-slate-900">{brief.patient_name}</h1>
-              <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${riskBadgeClass(brief.risk_level)}`}
+              >
                 Current risk {brief.risk_level}
               </span>
             </div>
@@ -127,6 +139,10 @@ export default function PatientBriefPage() {
           <div className="space-y-4">
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <h2 className="text-xl font-semibold text-slate-900">Trends</h2>
+              <p className="mt-1 text-xs text-slate-600">
+                Calculated by comparing this check-in to the patient&apos;s prior check-in (risk
+                rank, divergence intensity, and divergence frequency).
+              </p>
               <div className="mt-3 space-y-3">
                 {brief.trends.map((trend) => (
                   <div key={trend.label} className="rounded-xl border border-slate-200 px-3 py-2">
