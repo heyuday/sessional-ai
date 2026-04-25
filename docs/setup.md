@@ -1,6 +1,6 @@
 # Sessional Setup
 
-This document explains how to install dependencies and run the current MVP scaffold.
+This document explains how to install dependencies and run the current local MVP.
 
 ## Prerequisites
 
@@ -11,7 +11,7 @@ This document explains how to install dependencies and run the current MVP scaff
 ## Project Structure
 
 - `frontend`: Next.js (App Router) patient + clinician UI
-- `backend`: FastAPI API with mocked check-in and brief endpoints
+- `backend`: FastAPI API with auth, audio upload, Hume/Gemini processing, and clinician brief endpoints
 
 ## Install Dependencies
 
@@ -34,7 +34,7 @@ pip install -r requirements.txt
 
 ```bash
 cd frontend
-npm run dev
+npm run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
 Frontend will be available at `http://localhost:3000`.
@@ -50,6 +50,7 @@ Frontend will be available at `http://localhost:3000`.
 ## Minimal Account Lifecycle (MVP)
 
 - Both `patient` and `clinician` can create accounts from their respective auth pages.
+- Signup requires a `full_name` field.
 - Login and signup are backed by FastAPI auth endpoints and PostgreSQL `user_accounts` table.
 - Session cookies are stored in the frontend for route gating.
 - Sign out clears session cookies and returns user to `/`.
@@ -80,10 +81,14 @@ Backend health check:
 curl http://localhost:8000/health
 ```
 
-## Current API Endpoints (Mocked)
+## Current API Endpoints
 
 - `POST /api/v1/checkins/upload`
-- `GET /api/v1/briefs/{patient_id}`
+- `GET /api/v1/checkins/storage/latest`
+- `GET /api/v1/checkins/storage/{recording_id}/download`
+- `GET /api/v1/briefs/patients`
+- `GET /api/v1/briefs/patients/{patient_id}`
+- `DELETE /api/v1/briefs/patients/{patient_id}/reports`
 
 ## Local PostgreSQL Setup
 
@@ -132,7 +137,13 @@ HUME_TIMEOUT_SECONDS=60
 HUME_POLL_INTERVAL_SECONDS=3
 HUME_MAX_WAIT_SECONDS=180
 HUME_PROSODY_GRANULARITY=utterance
+JWT_SECRET_KEY=replace-with-random-secret
 ```
+
+Notes:
+
+- `PROCESSING_MODE=real` uses Hume + Gemini.
+- `PROCESSING_MODE=mock` bypasses external model calls for stable local UI demos.
 
 ### Verify Audio Persistence
 
@@ -148,3 +159,14 @@ psql postgresql://postgres:postgres@127.0.0.1:5432/sessional \
 - Frontend upload target defaults to `http://localhost:8000`.
 - Override with `NEXT_PUBLIC_API_BASE_URL` if needed.
 - Uploaded audio is currently stored in PostgreSQL `audio_recordings.audio_data` (`bytea`) until we add post-processing deletion.
+- If external model processing fails in real mode, upload still returns `200` with a fallback brief and records `processed_fallback`.
+- Clinician dashboard and full brief pages now use live backend data rather than frontend mock data.
+
+## Optional Local Reset
+
+To clear all local users and reports for a fresh demo:
+
+```bash
+psql "postgresql://postgres:postgres@127.0.0.1:5432/sessional" \
+  -c "DELETE FROM audio_recordings; DELETE FROM user_accounts;"
+```
