@@ -10,6 +10,32 @@ Therapists often see patients once a week (or less), but emotional state can cha
 Complete local setup and run instructions live in `docs/setup.md`.
 Tech stack details live in `docs/tech_stack.md`.
 
+## Demo
+
+- **Patient flow:** role selection -> patient auth -> record voice check-in -> submit
+- **Clinician flow:** clinician auth -> dashboard quick view -> full brief with divergence timeline and trends
+
+Demo screenshots:
+
+![Patient recording flow](assets/screenshots/patient-flow.png)
+![Clinician dashboard quick view](assets/screenshots/clinician-dashboard.png)
+![Full patient brief](assets/screenshots/full-brief.png)
+
+## Architecture Diagram
+
+```mermaid
+flowchart LR
+    A[Patient Voice Check-in] --> B[Frontend: Next.js Recorder]
+    B --> C[Backend: FastAPI Upload API]
+    C --> D[(PostgreSQL Audio Storage)]
+    C --> E[Hume AI: Prosody + Language Sentiment]
+    E --> F[Divergence Context Builder]
+    F --> G[Gemini Structured Brief Synthesis]
+    G --> H[Guardrails + Validation]
+    H --> I[(PostgreSQL Brief Fields)]
+    I --> J[Clinician Dashboard + Full Brief]
+```
+
 ## Product Context
 
 - Patients complete short asynchronous voice check-ins.
@@ -51,6 +77,13 @@ Tech stack details live in `docs/tech_stack.md`.
   - Risk direction from prior check-in (`Green < Yellow < Red`)
   - Divergence frequency trend from divergence-moment count delta
   - Divergence intensity trend from weighted severity-confidence delta
+
+## Safety and Scope
+
+- Sessional is a **clinical support and triage aid**, not a diagnostic system.
+- Output summaries are evidence-grounded signals to support therapist preparation, not clinical conclusions.
+- The app is **not** an emergency response service and should not be used as a crisis hotline replacement.
+- Human clinician judgment is required for interpretation and care decisions.
 
 ## Main Routes
 
